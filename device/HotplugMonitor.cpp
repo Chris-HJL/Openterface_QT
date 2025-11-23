@@ -251,10 +251,12 @@ DeviceChangeEvent HotplugMonitor::getInitialState() const
     return event;
 }
 
-void HotplugMonitor::checkForChangesSlot()
-{
-    // Run device discovery in background thread to avoid blocking UI
-    QtConcurrent::run([this]() {
-        checkForChanges();
-    });
+void HotplugMonitor::checkForChangesSlot()
+{
+    // Run device discovery in background thread to avoid blocking UI
+    auto future = QtConcurrent::run([this]() {
+        checkForChanges();
+    });
+    // We don't need to use the future, but we must consume it to satisfy the nodiscard attribute
+    Q_UNUSED(future);
 }

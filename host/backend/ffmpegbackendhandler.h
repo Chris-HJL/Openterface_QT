@@ -304,14 +304,17 @@ private:
     QTimer* m_deviceWaitTimer;
     bool m_suppressErrors;
     
-    QImage m_latestFrame;
-    
-    // Output management
-    QGraphicsVideoItem* m_graphicsVideoItem;
-    VideoPane* m_videoPane;
-    
-    // Error tracking
-    QString m_lastError;
+    QImage m_latestFrame;
+    
+    // Output management
+    QGraphicsVideoItem* m_graphicsVideoItem;
+    VideoPane* m_videoPane;
+    
+    // Error tracking
+    QString m_lastError;
+    
+    // Image saving path
+    QString m_saveImagePath;
     
 #ifdef HAVE_FFMPEG
     // Thread safety

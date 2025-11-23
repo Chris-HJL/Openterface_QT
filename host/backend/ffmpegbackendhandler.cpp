@@ -185,7 +185,8 @@ FFmpegBackendHandler::FFmpegBackendHandler(QObject *parent)
       m_recordingFrame(nullptr),
       m_recordingPacket(nullptr),
       m_interruptRequested(false),
-      m_operationStartTime(0)
+      m_operationStartTime(0),
+      m_saveImagePath("")
 #endif
 #ifdef HAVE_LIBJPEG_TURBO
       , m_turboJpegHandle(nullptr)
@@ -1657,6 +1658,32 @@ void FFmpegBackendHandler::processFrame()
             emit frameReady(pixmap);
         }
         
+        // Save latest frame as image for client access
+        // This enables clients to receive real-time frames as images
+        if (!m_saveImagePath.isEmpty()) {
+            // Only save if the path is valid and we have a frame to save
+            static qint64 lastSaveTime = 0;
+            qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+            
+            // Limit save frequency to avoid performance issues
+            if (currentTime - lastSaveTime > 500) { // Save at most once every 500ms
+                QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+                QString fileName = m_saveImagePath + "/realtime_" + timestamp + ".png";
+                
+                // Convert pixmap to image and save
+                QImage img = pixmap.toImage();
+                if (img.save(fileName)) {
+                    qCDebug(log_ffmpeg_backend) << "Saved realtime frame to:" << fileName;
+                    // Notify that a new image was saved for client access
+                    emit lastImageSaved(fileName);
+                } else {
+                    qCDebug(log_ffmpeg_backend) << "Failed to save realtime frame to:" << fileName;
+                }
+                
+                lastSaveTime = currentTime;
+            }
+        }
+        
         // Write frame to recording file if recording is active
 #ifdef HAVE_FFMPEG
         // Use mutex to safely check recording state and prevent race conditions during stop
@@ -2154,33 +2181,40 @@ void FFmpegBackendHandler::setVideoOutput(QGraphicsVideoItem* videoItem)
     }
 }
 
-void FFmpegBackendHandler::setVideoOutput(VideoPane* videoPane)
-{
-#ifdef HAVE_FFMPEG
-    QMutexLocker locker(&m_mutex);
-#endif
-    
-    // Disconnect previous connections
-    disconnect(this, &FFmpegBackendHandler::frameReady, this, nullptr);
-    
-    m_videoPane = videoPane;
-    m_graphicsVideoItem = nullptr;
-    
-    if (videoPane) {
-        qCDebug(log_ffmpeg_backend) << "VideoPane set for FFmpeg direct rendering";
-        
-        // Connect frame ready signal to VideoPane updateVideoFrame method
-        // Use QueuedConnection to ensure thread safety and prevent blocking capture thread
-        connect(this, &FFmpegBackendHandler::frameReady,
-                videoPane, &VideoPane::updateVideoFrame,
-                Qt::QueuedConnection);
-        
-        qCDebug(log_ffmpeg_backend) << "Connected frameReady signal to VideoPane::updateVideoFrame with QueuedConnection";
-        
-        // Enable direct FFmpeg mode in the VideoPane
-        videoPane->enableDirectFFmpegMode(true);
-        qCDebug(log_ffmpeg_backend) << "Enabled direct FFmpeg mode in VideoPane";
-    }
+void FFmpegBackendHandler::setVideoOutput(VideoPane* videoPane)
+{
+#ifdef HAVE_FFMPEG
+    QMutexLocker locker(&m_mutex);
+#endif
+    
+    // Disconnect previous connections
+    disconnect(this, &FFmpegBackendHandler::frameReady, this, nullptr);
+    
+    m_videoPane = videoPane;
+    m_graphicsVideoItem = nullptr;
+    
+    if (videoPane) {
+        qCDebug(log_ffmpeg_backend) << "VideoPane set for FFmpeg direct rendering";
+        
+        // Connect frame ready signal to VideoPane updateVideoFrame method
+        // Use QueuedConnection to ensure thread safety and prevent blocking capture thread
+        connect(this, &FFmpegBackendHandler::frameReady,
+                videoPane, &VideoPane::updateVideoFrame,
+                Qt::QueuedConnection);
+        
+        qCDebug(log_ffmpeg_backend) << "Connected frameReady signal to VideoPane::updateVideoFrame with QueuedConnection";
+        
+        // Enable direct FFmpeg mode in the VideoPane
+        videoPane->enableDirectFFmpegMode(true);
+        qCDebug(log_ffmpeg_backend) << "Enabled direct FFmpeg mode in VideoPane";
+    }
+}
+
+void FFmpegBackendHandler::setSaveImagePath(const QString& path)
+{
+    QMutexLocker locker(&m_mutex);
+    m_saveImagePath = path;
+    qCDebug(log_ffmpeg_backend) << "Set save image path to:" << path;
 }
 
 // Device availability and hotplug support methods

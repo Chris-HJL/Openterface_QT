@@ -30,6 +30,8 @@
 #include <QWaitCondition>
 #include <QPixmap>
 #include <memory>
+#include <QStandardPaths>
+#include <QDir>
 
 // Forward declarations for Qt types
 class QGraphicsVideoItem;
@@ -126,6 +128,9 @@ public:
     bool supportsRecordingStats() const;
     qint64 getRecordingFileSize() const;
     
+    // Image saving methods
+    void setSaveImagePath(const QString& path);
+    
     void setRecordingConfig(const RecordingConfig& config);
     RecordingConfig getRecordingConfig() const;
 
@@ -181,6 +186,9 @@ signals:
     void recordingResumed();
     void recordingError(const QString& error);
     void recordingDurationChanged(qint64 duration);
+    
+    // Image capture signals for client access
+    void lastImageSaved(const QString& imagePath);
 
 private:
 #ifdef HAVE_FFMPEG

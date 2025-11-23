@@ -186,7 +186,7 @@ FFmpegBackendHandler::FFmpegBackendHandler(QObject *parent)
       m_recordingPacket(nullptr),
       m_interruptRequested(false),
       m_operationStartTime(0),
-      m_saveImagePath("")
+      m_saveImagePath(QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + "/openterface")
 #endif
 #ifdef HAVE_LIBJPEG_TURBO
       , m_turboJpegHandle(nullptr)

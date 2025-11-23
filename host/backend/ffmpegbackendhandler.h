@@ -188,7 +188,7 @@ signals:
     void recordingDurationChanged(qint64 duration);
     
     // Image capture signals for client access
-    void lastImageSaved(const QString& imagePath);
+    void lastImagePath(const QString& imagePath);
 
 private:
 #ifdef HAVE_FFMPEG

@@ -1675,7 +1675,7 @@ void FFmpegBackendHandler::processFrame()
                 if (img.save(fileName)) {
                     qCDebug(log_ffmpeg_backend) << "Saved realtime frame to:" << fileName;
                     // Notify that a new image was saved for client access
-                    emit lastImageSaved(fileName);
+                    emit lastImagePath(fileName);
                 } else {
                     qCDebug(log_ffmpeg_backend) << "Failed to save realtime frame to:" << fileName;
                 }

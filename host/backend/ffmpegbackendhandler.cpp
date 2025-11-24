@@ -240,8 +240,7 @@ FFmpegBackendHandler::FFmpegBackendHandler(QObject *parent)
     connect(m_deviceWaitTimer, &QTimer::timeout, this, [this]() {
         qCWarning(log_ffmpeg_backend) << "Device wait timeout for:" << m_expectedDevicePath;
         m_waitingForDevice = false;
-        emit captureError(QString("Device wait timeout: %:
-1").arg(m_expectedDevicePath));
+        emit captureError(QString("Device wait timeout: %1").arg(m_expectedDevicePath));
     });
     
     // Connect to hotplug monitor

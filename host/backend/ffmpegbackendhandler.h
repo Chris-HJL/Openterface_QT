@@ -104,7 +104,7 @@ public:
         QString outputPath;
         QString format = "mp4";          // mp4, avi, mov
         QString videoCodec = "libx264";   // libx264, libx265, mpeg4
-        int videoBitrate = 2000000;       // 2 Mbps default
+        int videoBitrate = 2000000;       // 2-20 Mbps default
         int videoQuality = 23;            // CRF value for x264 (lower = better quality)
         bool useHardwareAcceleration = false;
     };
@@ -155,7 +155,7 @@ public:
     void waitForDeviceActivation(const QString& devicePath = "", int timeoutMs = 30000);
     void handleDeviceActivation(const QString& devicePath, const QString& portChain = QString());
     void handleDeviceDeactivation(const QString& devicePath);
-    void setCurrentDevicePortChain(const QString& portChain);  // Set port chain for current device
+    void setCurrentDevicePortChain(const QString& portChain);  // Set port chain for hotplug detection
     void setCurrentDevice(const QString& devicePath);  // Set current device path
     
     // Stub for MOC compatibility (might be leftover from autocomplete)
@@ -306,17 +306,21 @@ private:
     QTimer* m_deviceWaitTimer;
     bool m_suppressErrors;
     
-    QImage m_latestFrame;
-    
-    // Output management
-    QGraphicsVideoItem* m_graphicsVideoItem;
-    VideoPane* m_videoPane;
-    
-    // Error tracking
-    QString m_lastError;
-    
-    // Image saving path
+    QImage m_latestFrame;
+    
+    // Output management
+    QGraphicsVideoItem* m_graphicsVideoItem;
+    VideoPane* m_videoPane;
+    
+    // Error tracking
+    QString m_lastError;
+    
+    // Image saving path
     QString m_saveImagePath;
+    
+    // Image saving thread pool
+    QThreadPool* m_imageSavingThreadPool;
+    bool m_imageSavingEnabled;
     
 #ifdef HAVE_FFMPEG
     // Thread safety

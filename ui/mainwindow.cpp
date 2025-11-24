@@ -149,13 +149,18 @@ MainWindow::MainWindow(LanguageManager *languageManager, QWidget *parent)
     qCDebug(log_ui_mainwindow) << "MainWindow initialization complete, window ID:" << this->winId();
 }
 
-void MainWindow::startServer(){
-    tcpServer = new TcpServer(this);
-    tcpServer->startServer(SERVER_PORT);
-    qCDebug(log_ui_mainwindow) << "TCP Server start at port 12345";
-    connect(m_cameraManager, &CameraManager::lastImagePath, tcpServer, &TcpServer::handleImgPath);
-    connect(tcpServer, &TcpServer::syntaxTreeReady, this, &MainWindow::handleSyntaxTree);
-    connect(this, &MainWindow::emitTCPCommandStatus, tcpServer, &TcpServer::recvTCPCommandStatus);
+void MainWindow::startServer(){
+    tcpServer = new TcpServer(this);
+    tcpServer->startServer(SERVER_PORT);
+    qCDebug(log_ui_mainwindow) << "TCP Server start at port 12345";
+    // Connect camera manager (for legacy support)
+    connect(m_cameraManager, &CameraManager::lastImagePath, tcpServer, &TcpServer::handleImgPath);
+    // Connect FFmpeg backend handler for real-time frame updates
+    if (auto ffmpegBackend = m_cameraManager->getFFmpegBackend()) {
+        tcpServer->connectFFmpegBackend(ffmpegBackend);
+    }
+    connect(tcpServer, &TcpServer::syntaxTreeReady, this, &MainWindow::handleSyntaxTree);
+    connect(this, &MainWindow::emitTCPCommandStatus, tcpServer, &TcpServer::recvTCPCommandStatus);
 }
 
 

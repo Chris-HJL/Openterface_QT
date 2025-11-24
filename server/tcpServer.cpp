@@ -1,7 +1,9 @@
-#include "tcpServer.h"
-#include <QDebug>
-#include <QLoggingCategory>
-
+#include "tcpServer.h"
+#include <QDebug>
+#include <QLoggingCategory>
+#include "../host/backend/ffmpegbackendhandler.h"
+#include "../host/cameramanager.h"
+
 Q_LOGGING_CATEGORY(log_server_tcp, "opf.server.tcp")
 
 TcpServer::TcpServer(QObject *parent) : QTcpServer(parent), currentClient(nullptr) {}
@@ -32,9 +34,23 @@ void TcpServer::onReadyRead() {
     
 }
 
-void TcpServer::handleImgPath(const QString& imagePath){
-    lastImgPath = imagePath;
-    qCDebug(log_server_tcp) << "img path updated: " << lastImgPath;
+void TcpServer::handleImgPath(const QString& imagePath){
+    lastImgPath = imagePath;
+    qCDebug(log_server_tcp) << "img path updated: " - lastImgPath;
+}
+
+void TcpServer::connectFFmpegBackend(FFmpegBackendHandler* backend){
+    if (backend) {
+        connect(backend, &FFmpegBackendHandler::lastImagePath, this, &TcpServer::handleImgPath);
+        qCDebug(log_server_tcp) << "Connected FFmpegBackendHandler to TcpServer";
+    }
+}
+
+void TcpServer::connectCameraManager(CameraManager* manager){
+    if (manager) {
+        connect(manager, &CameraManager::lastImagePath, this, &TcpServer::handleImgPath);
+        qCDebug(log_server_tcp) << "Connected CameraManager to TcpServer";
+    }
 }
 
 ActionCommand TcpServer::parseCommand(const QByteArray& data){

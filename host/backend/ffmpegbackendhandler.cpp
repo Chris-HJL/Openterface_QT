@@ -63,6 +63,29 @@ Q_LOGGING_CATEGORY(log_ffmpeg_backend, "opf.backend.ffmpeg")
 
 #ifdef HAVE_FFMPEG
 /**
+ * @brief Image saving task for asynchronous image saving
+ */
+class ImageSaveTask : public QRunnable
+{
+public:
+    ImageSaveTask(const QString& imagePath, const QImage& image)
+        : m_imagePath(imagePath), m_image(image) {}
+    
+    void run() override {
+        // Perform the actual image saving in the background thread
+        if (m_image.save(m_imagePath)) {
+            qCDebug(log_ffmpeg_backend) << "Saved realtime frame to:" << m_imagePath;
+        } else {
+            qCDebug(log_ffmpeg_backend) << "Failed to save realtime frame to:" << m_imagePath;
+        }
+    }
+
+private:
+    QString m_imagePath;
+    QImage m_image;
+};
+
+/**
  * @brief Capture thread for handling FFmpeg video capture in background
  */
 class FFmpegBackendHandler::CaptureThread : public QThread
@@ -186,7 +209,9 @@ FFmpegBackendHandler::FFmpegBackendHandler(QObject *parent)
       m_recordingPacket(nullptr),
       m_interruptRequested(false),
       m_operationStartTime(0),
-      m_saveImagePath(QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + "/openterface")
+      m_saveImagePath(QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + "/openterface"),
+      m_imageSavingThreadPool(nullptr),
+      m_imageSavingEnabled(false)
 #endif
 #ifdef HAVE_LIBJPEG_TURBO
       , m_turboJpegHandle(nullptr)
@@ -215,7 +240,8 @@ FFmpegBackendHandler::FFmpegBackendHandler(QObject *parent)
     connect(m_deviceWaitTimer, &QTimer::timeout, this, [this]() {
         qCWarning(log_ffmpeg_backend) << "Device wait timeout for:" << m_expectedDevicePath;
         m_waitingForDevice = false;
-        emit captureError(QString("Device wait timeout: %1").arg(m_expectedDevicePath));
+        emit captureError(QString("Device wait timeout: %:
+1").arg(m_expectedDevicePath));
     });
     
     // Connect to hotplug monitor
@@ -237,6 +263,10 @@ FFmpegBackendHandler::FFmpegBackendHandler(QObject *parent)
             m_frameCount = 0;
         }
     });
+    
+    // Initialize image saving thread pool
+    m_imageSavingThreadPool = new QThreadPool(this);
+    m_imageSavingThreadPool->setMaxThreadCount(1); // Only one thread for image saving
 #endif
 }
 
@@ -1670,14 +1700,27 @@ void FFmpegBackendHandler::processFrame()
                 QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
                 QString fileName = m_saveImagePath + "/realtime_" + timestamp + ".png";
                 
-                // Convert pixmap to image and save
+                // Convert pixmap to image for saving
                 QImage img = pixmap.toImage();
-                if (img.save(fileName)) {
-                    qCDebug(log_ffmpeg_backend) << "Saved realtime frame to:" << fileName;
-                    // Notify that a new image was saved for client access
-                    emit lastImagePath(fileName);
+                
+                // Use background thread for image saving to avoid blocking the capture thread
+                if (m_imageSavingThreadPool && m_imageSavingEnabled) {
+                    // Create image save task and submit to thread pool
+                    ImageSaveTask* task = new ImageSaveTask(fileName, img);
+                    m_imageSavingThreadPool->start(task);
+                    
+                    qCDebug(log_ffmpeg_backend) << "Scheduled realtime frame save to:" << fileName 
+                                               << "using background thread";
                 } else {
-                    qCDebug(log_ffmpeg_backend) << "Failed to save realtime frame to:" << fileName;
+                    // Fallback to synchronous saving if thread pool is not available
+                    // Convert pixmap to image and save
+                    if (img.save(fileName)) {
+                        qCDebug(log_ffmpeg_backend) << "Saved realtime frame to:" << fileName;
+                        // Notify that a new image was saved for client access
+                        emit lastImagePath(fileName);
+                    } else {
+                        qCDebug(log_ffmpeg_backend) << "Failed to save realtime frame to:" << fileName;
+                    }
                 }
                 
                 lastSaveTime = currentTime;
@@ -3345,19 +3388,26 @@ void FFmpegBackendHandler::takeImage(const QString& filePath)
     }
 }
 
-void FFmpegBackendHandler::takeAreaImage(const QString& filePath, const QRect& captureArea)
-{
-    QMutexLocker locker(&m_mutex);
-    if (!m_latestFrame.isNull()) {
-        QImage cropped = m_latestFrame.copy(captureArea);
-        if (cropped.save(filePath)) {
-            qCDebug(log_ffmpeg_backend) << "Cropped image saved to:" << filePath;
-        } else {
-            qCWarning(log_ffmpeg_backend) << "Failed to save cropped image to:" << filePath;
-        }
-    } else {
-        qCWarning(log_ffmpeg_backend) << "No frame available for area image capture";
-    }
-}
+void FFmpegBackendHandler::takeAreaImage(const QString& filePath, const QRect& captureArea)
+{
+    QMutexLocker locker(&m_mutex);
+    if (!m_latestFrame.isNull()) {
+        QImage cropped = m_latestFrame.copy(captureArea);
+        if (cropped.save(filePath)) {
+            qCDebug(log_ffmpeg_backend) << "Cropped image saved to:" << filePath;
+        } else {
+            qCWarning(log_ffmpeg_backend) << "Failed to save cropped image to:" << filePath;
+        }
+    } else {
+        qCWarning(log_ffmpeg_backend) << "No frame available for area image capture";
+    }
+}
+
+// Image saving thread management
+void FFmpegBackendHandler::enableImageSavingThread(bool enable)
+{
+    m_imageSavingEnabled = enable;
+    qCDebug(log_ffmpeg_backend) << "Image saving thread enabled:" << enable;
+}
 
 #include "ffmpegbackendhandler.moc"

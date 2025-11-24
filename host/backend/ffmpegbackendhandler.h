@@ -32,6 +32,8 @@
 #include <memory>
 #include <QStandardPaths>
 #include <QDir>
+#include <QThreadPool>
+#include <QRunnable>
 
 // Forward declarations for Qt types
 class QGraphicsVideoItem;

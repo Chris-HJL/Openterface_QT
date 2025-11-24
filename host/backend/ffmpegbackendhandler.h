@@ -139,6 +139,9 @@ public:
     // Image capture methods
     void takeImage(const QString& filePath);
     void takeAreaImage(const QString& filePath, const QRect& captureArea);
+    
+    // Image saving thread management
+    void enableImageSavingThread(bool enable);
 
     // Update preferred hardware acceleration from settings
     void updatePreferredHardwareAcceleration();

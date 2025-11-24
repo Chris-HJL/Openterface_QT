@@ -36,7 +36,7 @@ void TcpServer::onReadyRead() {
 
 void TcpServer::handleImgPath(const QString& imagePath){
     lastImgPath = imagePath;
-    qCDebug(log_server_tcp) << "img path updated: " - lastImgPath;
+    qCDebug(log_server_tcp) << "img path updated: " << lastImgPath;
 }
 
 void TcpServer::connectFFmpegBackend(FFmpegBackendHandler* backend){

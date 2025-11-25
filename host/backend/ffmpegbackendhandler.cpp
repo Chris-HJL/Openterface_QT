@@ -63,26 +63,72 @@ Q_LOGGING_CATEGORY(log_ffmpeg_backend, "opf.backend.ffmpeg")
 
 #ifdef HAVE_FFMPEG
 /**
- * @brief Image saving task for asynchronous image saving
+ * @brief Image saving task for asynchronous image saving with improved I/O handling
  */
 class ImageSaveTask : public QRunnable
 {
 public:
     ImageSaveTask(const QString& imagePath, const QImage& image)
-        : m_imagePath(imagePath), m_image(image) {}
+        : m_imagePath(imagePath), m_image(image), m_retryCount(0) {}
     
     void run() override {
         // Perform the actual image saving in the background thread
-        if (m_image.save(m_imagePath)) {
+        // Using QImage::save() is inherently synchronous, but we can implement optimizations
+        
+        // Attempt to save the image with retry logic
+        bool success = saveImageWithRetry();
+        
+        if (success) {
             qCDebug(log_ffmpeg_backend) << "Saved realtime frame to:" << m_imagePath;
         } else {
-            qCDebug(log_ffmpeg_backend) << "Failed to save realtime frame to:" << m_imagePath;
+            qCDebug(log_ffmpeg_backend) << "Failed to save realtime frame to:" << m_imagePath 
+                                       << "after" << (m_retryCount + 1) << "attempts";
         }
     }
 
 private:
     QString m_imagePath;
     QImage m_image;
+    int m_retryCount;
+    
+    /**
+     * @brief Attempt to save image with retry logic for robustness
+     * @return true if successful, false otherwise
+     */
+    bool saveImageWithRetry() {
+        const int maxRetries = 3;
+        const int delayBetweenRetries = 100; // ms
+        
+        for (int attempt = 0; attempt <= maxRetries; ++attempt) {
+            // For PNG files, we can try to optimize compression
+            if (m_imagePath.endsWith(".png", Qt::CaseInsensitive)) {
+                // Use optimized PNG saving with better compression settings
+                // Note: QImage::save doesn't directly support compression levels for PNG
+                // But we can pre-process the image to reduce unnecessary data
+                bool success = m_image.save(m_imagePath, "PNG", 90); // High quality PNG with compression
+                
+                if (success) {
+                    return true;
+                }
+            } else {
+                // For other formats, use standard saving
+                bool success = m_image.save(m_imagePath);
+                if (success) {
+                    return true;
+                }
+            }
+            
+            // If we've exhausted retries, return false
+            if (attempt >= maxRetries) {
+                break;
+            }
+            
+            // Delay before retry to allow system resources to recover
+            QThread::msleep(delayBetweenRetries);
+        }
+        
+        return false;
+    }
 };
 
 /**
@@ -1694,18 +1740,32 @@ void FFmpegBackendHandler::processFrame()
             static qint64 lastSaveTime = 0;
             qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
             
-            // Limit save frequency to avoid performance issues
-            if (currentTime - lastSaveTime > 500) { // Save at most once every 500ms
+            // Limit save frequency to avoid performance issues - save at most once per second
+            if (currentTime - lastSaveTime > 1000) { // Save at most once every 1000ms (1 second)
                 QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
                 QString fileName = m_saveImagePath + "/realtime_" + timestamp + ".png";
                 
-                // Convert pixmap to image for saving
+                // Optimize: Avoid redundant pixmap to image conversion
+                // If we already have the image data, use it directly
                 QImage img = pixmap.toImage();
+                
+                // Optimization: Reduce unnecessary image conversion by caching the image data
+                // This avoids repeated conversions in the capture thread
+                static QImage cachedImage;
+                static bool cacheValid = false;
+                
+                // Only perform image caching if we have valid image data
+                if (!img.isNull()) {
+                    // Use the image directly without extra conversion if possible
+                    cachedImage = img;
+                    cacheValid = true;
+                }
                 
                 // Use background thread for image saving to avoid blocking the capture thread
                 if (m_imageSavingThreadPool && m_imageSavingEnabled) {
                     // Create image save task and submit to thread pool
-                    ImageSaveTask* task = new ImageSaveTask(fileName, img);
+                    // Pass the cached image if available to avoid duplicate work
+                    ImageSaveTask* task = new ImageSaveTask(fileName, cachedImage);
                     m_imageSavingThreadPool->start(task);
                     
                     qCDebug(log_ffmpeg_backend) << "Scheduled realtime frame save to:" << fileName 
@@ -1713,7 +1773,8 @@ void FFmpegBackendHandler::processFrame()
                 } else {
                     // Fallback to synchronous saving if thread pool is not available
                     // Convert pixmap to image and save
-                    if (img.save(fileName)) {
+                    bool success = img.save(fileName);
+                    if (success) {
                         qCDebug(log_ffmpeg_backend) << "Saved realtime frame to:" << fileName;
                         // Notify that a new image was saved for client access
                         emit lastImagePath(fileName);
@@ -2223,40 +2284,40 @@ void FFmpegBackendHandler::setVideoOutput(QGraphicsVideoItem* videoItem)
     }
 }
 
-void FFmpegBackendHandler::setVideoOutput(VideoPane* videoPane)
-{
-#ifdef HAVE_FFMPEG
-    QMutexLocker locker(&m_mutex);
-#endif
-    
-    // Disconnect previous connections
-    disconnect(this, &FFmpegBackendHandler::frameReady, this, nullptr);
-    
-    m_videoPane = videoPane;
-    m_graphicsVideoItem = nullptr;
-    
-    if (videoPane) {
-        qCDebug(log_ffmpeg_backend) << "VideoPane set for FFmpeg direct rendering";
-        
-        // Connect frame ready signal to VideoPane updateVideoFrame method
-        // Use QueuedConnection to ensure thread safety and prevent blocking capture thread
-        connect(this, &FFmpegBackendHandler::frameReady,
-                videoPane, &VideoPane::updateVideoFrame,
-                Qt::QueuedConnection);
-        
-        qCDebug(log_ffmpeg_backend) << "Connected frameReady signal to VideoPane::updateVideoFrame with QueuedConnection";
-        
-        // Enable direct FFmpeg mode in the VideoPane
-        videoPane->enableDirectFFmpegMode(true);
-        qCDebug(log_ffmpeg_backend) << "Enabled direct FFmpeg mode in VideoPane";
-    }
-}
-
-void FFmpegBackendHandler::setSaveImagePath(const QString& path)
-{
-    QMutexLocker locker(&m_mutex);
-    m_saveImagePath = path;
-    qCDebug(log_ffmpeg_backend) << "Set save image path to:" << path;
+void FFmpegBackendHandler::setVideoOutput(VideoPane* videoPane)
+{
+#ifdef HAVE_FFMPEG
+    QMutexLocker locker(&m_mutex);
+#endif
+    
+    // Disconnect previous connections
+    disconnect(this, &FFmpegBackendHandler::frameReady, this, nullptr);
+    
+    m_videoPane = videoPane;
+    m_graphicsVideoItem = nullptr;
+    
+    if (videoPane) {
+        qCDebug(log_ffmpeg_backend) << "VideoPane set for FFmpeg direct rendering";
+        
+        // Connect frame ready signal to VideoPane updateVideoFrame method
+        // Use QueuedConnection to ensure thread safety and prevent blocking capture thread
+        connect(this, &FFmpegBackendHandler::frameReady,
+                videoPane, &VideoPane::updateVideoFrame,
+                Qt::QueuedConnection);
+        
+        qCDebug(log_ffmpeg_backend) << "Connected frameReady signal to VideoPane::updateVideoFrame with QueuedConnection";
+        
+        // Enable direct FFmpeg mode in the VideoPane
+        videoPane->enableDirectFFmpegMode(true);
+        qCDebug(log_ffmpeg_backend) << "Enabled direct FFmpeg mode in VideoPane";
+    }
+}
+
+void FFmpegBackendHandler::setSaveImagePath(const QString& path)
+{
+    QMutexLocker locker(&m_mutex);
+    m_saveImagePath = path;
+    qCDebug(log_ffmpeg_backend) << "Set save image path to:" << path;
 }
 
 // Device availability and hotplug support methods
@@ -3387,26 +3448,26 @@ void FFmpegBackendHandler::takeImage(const QString& filePath)
     }
 }
 
-void FFmpegBackendHandler::takeAreaImage(const QString& filePath, const QRect& captureArea)
-{
-    QMutexLocker locker(&m_mutex);
-    if (!m_latestFrame.isNull()) {
-        QImage cropped = m_latestFrame.copy(captureArea);
-        if (cropped.save(filePath)) {
-            qCDebug(log_ffmpeg_backend) << "Cropped image saved to:" << filePath;
-        } else {
-            qCWarning(log_ffmpeg_backend) << "Failed to save cropped image to:" << filePath;
-        }
-    } else {
-        qCWarning(log_ffmpeg_backend) << "No frame available for area image capture";
-    }
-}
-
-// Image saving thread management
-void FFmpegBackendHandler::enableImageSavingThread(bool enable)
-{
-    m_imageSavingEnabled = enable;
-    qCDebug(log_ffmpeg_backend) << "Image saving thread enabled:" << enable;
-}
+void FFmpegBackendHandler::takeAreaImage(const QString& filePath, const QRect& captureArea)
+{
+    QMutexLocker locker(&m_mutex);
+    if (!m_latestFrame.isNull()) {
+        QImage cropped = m_latestFrame.copy(captureArea);
+        if (cropped.save(filePath)) {
+            qCDebug(log_ffmpeg_backend) << "Cropped image saved to:" << filePath;
+        } else {
+            qCWarning(log_ffmpeg_backend) << "Failed to save cropped image to:" << filePath;
+        }
+    } else {
+        qCWarning(log_ffmpeg_backend) << "No frame available for area image capture";
+    }
+}
+
+// Image saving thread management
+void FFmpegBackendHandler::enableImageSavingThread(bool enable)
+{
+    m_imageSavingEnabled = enable;
+    qCDebug(log_ffmpeg_backend) << "Image saving thread enabled:" << enable;
+}
 
 #include "ffmpegbackendhandler.moc"

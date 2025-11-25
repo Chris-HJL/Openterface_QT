@@ -100,19 +100,18 @@ private:
         const int delayBetweenRetries = 100; // ms
         
         for (int attempt = 0; attempt <= maxRetries; ++attempt) {
-            // For PNG files, we can try to optimize compression
-            if (m_imagePath.endsWith(".png", Qt::CaseInsensitive)) {
-                // Use optimized PNG saving with better compression settings
-                // Note: QImage::save doesn't directly support compression levels for PNG
-                // But we can pre-process the image to reduce unnecessary data
-                bool success = m_image.save(m_imagePath, "PNG", 90); // High quality PNG with compression
+            // Always save as JPEG for better performance
+            if (m_imagePath.endsWith(".jpg", Qt::CaseInsensitive) || 
+                m_imagePath.endsWith(".jpeg", Qt::CaseInsensitive)) {
+                // Save as JPEG with high quality (90%)
+                bool success = m_image.save(m_imagePath, "JPEG", 90);
                 
                 if (success) {
                     return true;
                 }
             } else {
-                // For other formats, use standard saving
-                bool success = m_image.save(m_imagePath);
+                // For other formats, use standard saving (fallback to PNG)
+                bool success = m_image.save(m_imagePath, "PNG", 90);
                 if (success) {
                     return true;
                 }
@@ -1742,8 +1741,8 @@ void FFmpegBackendHandler::processFrame()
             
             // Limit save frequency to avoid performance issues - save at most once per second
             if (currentTime - lastSaveTime > 1000) { // Save at most once every 1000ms (1 second)
-                QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
-                QString fileName = m_saveImagePath + "/realtime_" + timestamp + ".png";
+                // Use fixed filename for consistent overwrite
+                QString fileName = m_saveImagePath + "/realtime_image.jpg";
                 
                 // Optimize: Avoid redundant pixmap to image conversion
                 // If we already have the image data, use it directly

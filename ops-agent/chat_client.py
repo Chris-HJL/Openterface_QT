@@ -45,20 +45,20 @@ def get_api_response(prompt: str, api_url: str = "http://localhost:8000/v1/chat/
             
             payload = {
                 "messages": messages,
-                "max_tokens": 1024,
-                "temperature": 0.7,
-                "top_p": 1,
+                "max_tokens": 4096,
+                # "temperature": 0.7,
+                # "top_p": 1,
                 "model": model
             }
         else:
             # Completions API 格式
             payload = {
                 "prompt": prompt,
-                "max_tokens": 1024,
-                "temperature": 0.7,
-                "top_p": 1,
-                "frequency_penalty": 0,
-                "presence_penalty": 0,
+                "max_tokens": 4096,
+                # "temperature": 0.7,
+                # "top_p": 1,
+                # "frequency_penalty": 0,
+                # "presence_penalty": 0,
                 "model": model
             }
         

@@ -62,11 +62,17 @@ def get_api_response(prompt: str, api_url: str = "http://localhost:8000/v1/chat/
                 "model": model
             }
         
+        # 获取API密钥，从环境变量获取，如果没有则使用默认值"EMPTY"
+        api_key = os.getenv("API_KEY", "EMPTY")
+        
         # 发送POST请求
         response = requests.post(
             api_url,
             json=payload,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            },
             timeout=30
         )
         
@@ -423,7 +429,6 @@ def main():
                 if image_path and image_path.startswith("./images"):
                     print(f"   📷 已获取图片: {os.path.basename(image_path)}")
                     # 明确提示用户输入问题
-                    print("\n🔍 请在下方输入您想询问的问题:")
                     question = input("   请输入要询问的问题: ").strip()
                     if not question:
                         print("   ⚠️  问题不能为空")

@@ -476,6 +476,19 @@ def main():
                         response = get_api_response(question, api_url, model, image_path, conversation_history)
                     else:
                         response = get_api_response(question, api_url, model, image_path)
+                    
+                    # 如果在多轮对话模式下，更新对话历史
+                    if is_multiturn_mode and response != "":
+                        # 添加用户消息到历史（包含图片信息）
+                        conversation_history.append({
+                            "role": "user", 
+                            "content": [
+                                {"type": "text", "text": question},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encode_image_to_base64(image_path)}"}}
+                            ]
+                        })
+                        # 添加AI响应到历史
+                        conversation_history.append({"role": "assistant", "content": response})
                 else:
                     if "❌" in image_path:
                         print(f"   ⚠️ {image_path}")

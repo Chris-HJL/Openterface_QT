@@ -46,7 +46,7 @@ def handle_client(client_socket, address):
         # 只处理lastimage命令
         if command.lower() == "lastimage":
             # 固定图片路径
-            image_path = r"C:\Users\huang\Pictures\openterface\last_image_20251125_205826.jpg"
+            image_path = r"C:\Users\huang\Pictures\openterface\1.jpg"
             
             # 检查图片文件是否存在
             if not os.path.exists(image_path):
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     print("  - 模拟TCP服务器")
     print("  - 仅处理 lastimage 命令")
     print("  - 读取固定图片文件")
-    print("  - 图片路径: C:\\Users\\huang\\Pictures\\openterface\\last_image_20251125_205826.jpg")
+    print("  - 图片路径: C:\\Users\\huang\\Pictures\\openterface\\1.jpg")
     print("-")
     print("使用方法:")
     print("  1. 运行此程序启动服务器")

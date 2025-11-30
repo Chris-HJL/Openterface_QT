@@ -15,6 +15,78 @@ from typing import Dict, Any, Optional
 conversation_history = []
 is_multiturn_mode = False
 
+# 多语言支持全局变量
+current_translations = {}
+current_language = "en"
+
+def load_translations(lang_code: str = "en") -> Dict[str, Any]:
+    """
+    加载指定语言的翻译文件
+    
+    Args:
+        lang_code (str): 语言代码，如 "zh" 或 "en"
+        
+    Returns:
+        Dict[str, Any]: 翻译字典
+    """
+    try:
+        lang_file = os.path.join("i18n", f"{lang_code}.json")
+        with open(lang_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        # 如果指定语言文件不存在，加载默认语言（英语）
+        with open(os.path.join("i18n", "en.json"), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Failed to load translation file: {str(e)}")
+        return {}
+
+def _(key: str, **kwargs) -> str:
+    """
+    翻译函数，支持格式化字符串
+    
+    Args:
+        key (str): 翻译键
+        **kwargs: 格式化参数
+        
+    Returns:
+        str: 翻译后的文本
+    """
+    global current_translations
+    # 支持嵌套键，如 "messages.connecting"
+    keys = key.split(".")
+    value = current_translations
+    for k in keys:
+        if isinstance(value, dict) and k in value:
+            value = value[k]
+        else:
+            return key  # 如果键不存在，返回原始键
+    
+    # 支持格式化字符串
+    if kwargs and isinstance(value, str):
+        return value.format(**kwargs)
+    return value
+
+def switch_language(lang_code: str) -> bool:
+    """
+    切换语言
+    
+    Args:
+        lang_code (str): 语言代码，如 "zh" 或 "en"
+        
+    Returns:
+        bool: 是否切换成功
+    """
+    global current_translations, current_language
+    if lang_code in ["zh", "en"]:
+        new_translations = load_translations(lang_code)
+        if new_translations:
+            current_translations = new_translations
+            current_language = lang_code
+            print(_("messages.lang_switched", lang=lang_code))
+            return True
+    return False
+
 def get_api_response(prompt: str, api_url: str = "http://localhost:8000/v1/chat/completions", model: str = "default", image_path: str = None, history: list = None) -> str:
     """
     向本地OpenAI兼容API发送请求并获取响应
@@ -106,16 +178,16 @@ def get_api_response(prompt: str, api_url: str = "http://localhost:8000/v1/chat/
                 else:
                     return json.dumps(choice, indent=2, ensure_ascii=False)
             else:
-                return "未找到有效响应内容"
+                return _("api_errors.no_response")
         else:
-            return f"API请求失败，状态码: {response.status_code}"
+            return _("api_errors.status_error", code=response.status_code)
             
     except requests.exceptions.Timeout:
-        return "❌ 请求超时，请检查本地API服务是否运行正常"
+        return _("api_errors.timeout")
     except requests.exceptions.ConnectionError:
-        return "❌ 无法连接到本地API服务，请确保API服务正在运行"
+        return _("api_errors.connection_error")
     except Exception as e:
-        return f"❌ 发生错误: {str(e)}"
+        return _("api_errors.error_occurred", error=str(e))
 
 
 def encode_image_to_base64(image_path: str) -> str:
@@ -133,7 +205,7 @@ def encode_image_to_base64(image_path: str) -> str:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
     except Exception as e:
-        return f"图像编码错误: {str(e)}"
+        return f"Image encoding error: {str(e)}"
 
 
 def test_api_connection(api_url: str) -> bool:
@@ -158,38 +230,40 @@ def test_api_connection(api_url: str) -> bool:
 def print_header():
     """打印程序标题和帮助信息"""
     print("=" * 60)
-    print("🤖 Openterface AI Chat 客户端")
-    print("与本地OpenAI兼容API进行交互的智能对话系统")
+    print(_("app_title"))
+    print(_("app_description"))
     print("=" * 60)
-    print("💡 功能特点:")
-    print("   • 与本地大模型实时对话")
-    print("   • 支持多种API格式")
-    print("   • 友好的交互界面")
-    print("   • 错误处理和重试机制")
+    print("💡 " + _("feature_list.title"))
+    print(_("feature_list.real_time_chat"))
+    print(_("feature_list.multiple_api"))
+    print(_("feature_list.friendly_ui"))
+    print(_("feature_list.error_handling"))
     print("=" * 60)
 
 
 def print_help():
     """打印帮助信息"""
-    print("\n📋 帮助信息:")
-    print("  • 输入任何问题与AI对话")
-    print("  • 输入 'quit' 或 'exit' 退出程序")
-    print("  • 输入 'clear' 清除对话历史")
-    print("  • 输入 'help' 查看帮助信息")
-    print("  • 输入 'info' 查看当前API配置")
-    print("  • 输入 'model' 切换模型")
-    print("  • 输入 'image' 从服务器获取最新图片并进行多模态问答")
-    print("  • 输入 'multiturn' 进入多轮对话模式")
-    print("  • 输入 'single' 退出多轮对话模式")
+    print(f"\n{_('help_title')}")
+    print(_("commands.ask_question"))
+    print(_("commands.quit"))
+    print(_("commands.clear"))
+    print(_("commands.help"))
+    print(_("commands.info"))
+    print(_("commands.model"))
+    print(_("commands.image"))
+    print(_("commands.multiturn"))
+    print(_("commands.single"))
+    print(_("commands.lang_help"))
+    print(_("commands.lang_switch"))
     print("=" * 60)
 
 
 def print_api_info(api_url: str):
     """打印API信息"""
-    print(f"\n📡 当前API配置:")
-    print(f"   地址: {api_url}")
+    print(f"\n{_('api_info.title')}")
+    print(_("api_info.address", api_url=api_url))
     connection_status = "✅ 可用" if test_api_connection(api_url) else "⚠️  不可用"
-    print(f"   状态: {connection_status}")
+    print(_("api_info.status", status=connection_status))
 
 
 def get_last_image_from_server(host: str = 'localhost', port: int = 12345, output_dir: str = './images', timeout: int = 60) -> str:
@@ -215,8 +289,8 @@ def get_last_image_from_server(host: str = 'localhost', port: int = 12345, outpu
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             print(f"[{timestamp}] {message}")
         
-        log("开始连接到Openterface服务器...")
-        log(f"目标: {host}:{port}")
+        log(_("image_server.connecting"))
+        log(_("image_server.target", host=host, port=port))
         
         # 创建TCP连接
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -224,12 +298,12 @@ def get_last_image_from_server(host: str = 'localhost', port: int = 12345, outpu
         
         # 连接到服务器
         client_socket.connect((host, port))
-        log(f"✅ 成功连接到服务器 {host}:{port}")
+        log(_("image_server.connect_success", host=host, port=port))
         
         # 发送"lastimage"命令
         command = "lastimage"
         client_socket.send(command.encode('utf-8'))
-        log(f"📤 已发送命令: {command}")
+        log(_("image_server.sent_command", command=command))
         
         # 接收响应
         response = b""
@@ -257,10 +331,10 @@ def get_last_image_from_server(host: str = 'localhost', port: int = 12345, outpu
                     # 如果是错误或状态响应，立即停止接收
                     break
             except socket.timeout:
-                log("⏰ 接收超时，可能数据不完整")
+                log(_("image_server.timeout"))
                 break
             except Exception as e:
-                log(f"❌ 接收数据时出错: {str(e)}")
+                log(_("image_server.receive_error", error=str(e)))
                 break
         
         # 继续接收剩余的图像数据
@@ -274,13 +348,13 @@ def get_last_image_from_server(host: str = 'localhost', port: int = 12345, outpu
                     response += data
                     total_received += len(data)
                 except socket.timeout:
-                    log("⏰ 图像数据接收超时")
+                    log(_("image_server.timeout"))
                     break
                 except Exception as e:
-                    log(f"❌ 接收图像数据时出错: {str(e)}")
+                    log(_("image_server.receive_image_error", error=str(e)))
                     break
         
-        log(f"📥 收到响应，大小: {len(response)} 字节")
+        log(_("image_server.received_data", size=len(response)))
         
         # 检查是否是图片数据
         if response.startswith(b"IMAGE:"):
@@ -304,70 +378,90 @@ def get_last_image_from_server(host: str = 'localhost', port: int = 12345, outpu
                         with open(filepath, 'wb') as f:
                             f.write(image_data[:image_size])
                         
-                        log(f"💾 图片已保存到: {filepath}")
-                        log(f"📊 图片大小: {image_size} 字节")
+                        log(_("image_server.image_saved", path=filepath))
+                        log(_("image_server.image_size", size=image_size))
                         
                         # 显示成功信息
-                        print("\n✅ 图片获取成功!")
-                        print(f"📁 文件路径: {filepath}")
-                        print(f"📊 文件大小: {image_size} 字节")
-                        print(f"🕐 保存时间: {timestamp}")
+                        print(_("messages.image_success"))
+                        print(_("messages.file_path", path=filepath))
+                        print(_("messages.file_size", size=image_size))
+                        print(_("messages.save_time", time=timestamp))
                         
                         # 关闭连接
                         client_socket.close()
                         return filepath
                         
             except ValueError as ve:
-                log(f"❌ 图片数据格式错误: {str(ve)}")
+                log(_("image_server.image_data_error", error=str(ve)))
             except Exception as e:
-                log(f"❌ 处理图片数据时出错: {str(e)}")
+                log(_("image_server.process_image_error", error=str(e)))
         
         # 检查是否是错误响应
         elif response.startswith(b"ERROR:"):
             error_msg = response.decode('utf-8')[6:].strip()
-            log(f"❌ 服务器错误: {error_msg}")
+            log(_("image_server.server_error", error=error_msg))
             client_socket.close()
             return f"❌ 服务器错误: {error_msg}"
             
         # 检查是否是状态响应
         elif response.startswith(b"STATUS:"):
             status_msg = response.decode('utf-8')[7:].strip()
-            log(f"📈 服务器状态: {status_msg}")
+            log(_("image_server.server_status", status=status_msg))
             client_socket.close()
             return f"📈 服务器状态: {status_msg}"
             
         else:
             # 未知响应格式
-            log(f"⚠️  收到未知响应格式: {response[:100]}...")
+            log(_("image_server.unknown_response", response=response[:100]))
             # 尝试显示文本内容
             try:
                 text_content = response.decode('utf-8', errors='ignore')
                 if text_content.strip():
-                    log(f"文本内容: {text_content[:200]}...")
+                    log(_("image_server.text_content", content=text_content[:200]))
             except:
                 pass
         
         # 关闭连接
         client_socket.close()
-        log("🔒 连接已关闭")
-        return "❌ 图片获取失败"
+        log(_("image_server.connection_closed"))
+        return _("image_server.image_failed")
         
     except socket.timeout:
-        log("⏰ 连接超时")
-        return "❌ 连接超时"
+        log(_("image_server.timeout_error"))
+        return _("image_server.timeout_error")
     except ConnectionRefusedError:
-        log("❌ 连接被拒绝，请确保服务器正在运行")
-        return "❌ 连接被拒绝，请确保服务器正在运行"
+        log(_("image_server.refused_error"))
+        return _("image_server.refused_error")
     except socket.gaierror as e:
-        log(f"🌐 DNS解析错误: {str(e)}")
-        return f"🌐 DNS解析错误: {str(e)}"
+        log(_("image_server.dns_error", error=str(e)))
+        return _("image_server.dns_error", error=str(e))
     except Exception as e:
-        log(f"💥 发生未知错误: {str(e)}")
-        return f"💥 发生未知错误: {str(e)}"
+        log(_("image_server.unknown_error", error=str(e)))
+        return _("image_server.unknown_error", error=str(e))
 
 
 def main():
     """主函数：提供交互式对话界面"""
+    import sys
+    
+    # 初始化翻译
+    global current_translations, current_language
+    
+    # 检查命令行参数，支持 --lang 选项
+    for i, arg in enumerate(sys.argv):
+        if arg in ['--lang', '-l'] and i + 1 < len(sys.argv):
+            lang_code = sys.argv[i + 1].lower()
+            if lang_code in ['en', 'zh']:
+                current_language = lang_code
+    
+    current_translations = load_translations(current_language)
+    
+    # 检查是否需要自动显示帮助信息并退出
+    if '--help' in sys.argv or '-h' in sys.argv:
+        print_header()
+        print_help()
+        return
+    
     print_header()
     
     # 默认API地址
@@ -375,44 +469,44 @@ def main():
     model = "qwen3-30b-vl"
     
     # 获取用户输入的API地址（可选）
-    print(f"\n🔧 配置API连接:")
-    print(f"   默认地址: {api_url}")
-    custom_api = input("   请输入自定义API地址 (直接回车使用默认地址): ").strip()
+    print(f"\n{_('messages.config_api')}")
+    print(_("messages.default_address", api_url=api_url))
+    custom_api = input(_("messages.enter_custom_api")).strip()
     if custom_api:
         api_url = custom_api
     
     # 获取用户输入的模型名称（可选）
-    print(f"   默认模型: {model}")
-    custom_model = input("   请输入自定义模型名称 (直接回车使用默认模型): ").strip()
+    print(_("messages.default_model", model=model))
+    custom_model = input(_("messages.enter_custom_model")).strip()
     if custom_model:
         model = custom_model
     
     # 测试连接
-    print(f"\n🔗 正在连接到 {api_url}...")
+    print(_("messages.connecting", api_url=api_url))
     if test_api_connection(api_url):
-        print("   ✅ 成功连接到本地API服务")
+        print(_("messages.connection_success"))
     else:
-        print("   ⚠️  API服务可能运行但未正确响应")
-        print("   请确保本地API服务正在运行")
+        print(_("messages.connection_warning"))
+        print(_("messages.connection_advice"))
     
     print("\n" + "-" * 60)
-    print("💬 开始对话 (输入 'help' 查看帮助)")
+    print(_("messages.start_chat"))
     print("-" * 60)
     
     # 交互式对话循环
     while True:
         try:
             # 获取用户输入
-            user_input = input("\n👤 您的问题: ").strip()
+            user_input = input(_("messages.your_question")).strip()
             
             # 处理各种命令
             if user_input.lower() in ['quit', 'exit', 'q']:
-                print("\n👋 再见！感谢使用 Openterface AI Chat 客户端")
+                print(_("messages.goodbye"))
                 break
             
             # 处理清除命令
             if user_input.lower() in ['clear', 'cls']:
-                print("\n🔄 对话历史已清除")
+                print(_("messages.history_cleared"))
                 # 清除对话历史
                 global conversation_history
                 conversation_history = []
@@ -430,26 +524,44 @@ def main():
             
             # 处理模型切换命令
             if user_input.lower() == 'model':
-                new_model = input("   请输入模型名称 (直接回车保持默认): ").strip()
+                new_model = input("   " + _("messages.enter_model") + " ").strip()
                 if new_model:
                     model = new_model
-                    print(f"   ✅ 模型已切换为: {model}")
+                    print(_("messages.model_switched", model=model))
+                continue
+            
+            # 处理语言命令
+            if user_input.lower().startswith('lang'):
+                parts = user_input.split()
+                if len(parts) == 1:
+                    # 显示当前语言
+                    print(_("messages.current_lang", lang=current_language))
+                elif len(parts) == 2:
+                    # 切换语言
+                    lang_code = parts[1].lower()
+                    if lang_code in ['en', 'zh']:
+                        switch_language(lang_code)
+                    else:
+                        print(_("messages.lang_invalid"))
+                else:
+                    print(_("messages.lang_invalid"))
                 continue
             
             # 处理多轮对话模式命令
             if user_input.lower() == 'multiturn':
-                print("\n🔄 已进入多轮对话模式")
-                print("   在此模式下，您可以进行连续对话")
-                print("   输入 'single' 可退出多轮对话模式")
-                print("   输入 'image' 可在当前对话中使用图像")
-                print("   输入 'clear' 可清空当前对话历史")
-                print("   输入 'help' 可查看帮助信息")
+                print(_("messages.multiturn_mode"))
+                print(_("messages.multiturn_info_1"))
+                print(_("messages.multiturn_info_2"))
+                print(_("messages.multiturn_info_3"))
+                print(_("messages.multiturn_info_4"))
+                print(_("messages.multiturn_info_5"))
+                global is_multiturn_mode
                 is_multiturn_mode = True
                 continue
             
             # 处理退出多轮对话模式命令
             if user_input.lower() == 'single':
-                print("\n✅ 已退出多轮对话模式")
+                print(_("messages.single_mode"))
                 is_multiturn_mode = False
                 # 清除对话历史
                 conversation_history = []
@@ -458,19 +570,19 @@ def main():
             # 处理图像命令
             if user_input.lower() == 'image':
                 # 从服务器获取图片
-                print("\n📥 正在从服务器获取最新图片...")
+                print(_("messages.getting_image"))
                 image_path = get_last_image_from_server()
-                print(f"   🔍 服务器响应: {image_path}")
+                print(_("messages.server_response", response=image_path))
                 if image_path and image_path.startswith("./images"):
-                    print(f"   📷 已获取图片: {os.path.basename(image_path)}")
+                    print(_("messages.image_obtained", filename=os.path.basename(image_path)))
                     # 明确提示用户输入问题
-                    question = input("   请输入要询问的问题: ").strip()
+                    question = input(_("messages.enter_question")).strip()
                     if not question:
-                        print("   ⚠️  问题不能为空")
+                        print(_("messages.question_empty"))
                         continue
                     # 发送带图像和问题的请求
-                    print("\n🧠 正在处理您的问题...")
-                    print("   🔄 请稍候...")
+                    print(_("messages.processing"))
+                    print(_("messages.please_wait"))
                     # 如果在多轮对话模式下，传递对话历史
                     if is_multiturn_mode:
                         response = get_api_response(question, api_url, model, image_path, conversation_history)
@@ -491,12 +603,12 @@ def main():
                         conversation_history.append({"role": "assistant", "content": response})
                 else:
                     if "❌" in image_path:
-                        print(f"   ⚠️ {image_path}")
+                        print(_("image_server.image_path_warning", image_path=image_path))
                         # 重新提示用户输入其他内容
                         continue
                     # 发送普通请求
-                    print("\n🧠 正在处理您的问题...")
-                    print("   🔄 请稍候...")
+                    print(_("messages.processing"))
+                    print(_("messages.please_wait"))
                     # 如果在多轮对话模式下，传递对话历史
                     if is_multiturn_mode:
                         response = get_api_response(user_input, api_url, model, None, conversation_history)
@@ -505,12 +617,12 @@ def main():
             else:
                 # 处理空输入
                 if not user_input:
-                    print("⚠️  请输入有效的问题")
+                    print(_("messages.invalid_question"))
                     continue
                 
                 # 发送请求并显示响应
-                print("\n🧠 正在处理您的问题...")
-                print("   🔄 请稍候...")
+                print(_("messages.processing"))
+                print(_("messages.please_wait"))
                 
                 # 如果在多轮对话模式下，传递对话历史
                 if is_multiturn_mode:
@@ -526,17 +638,17 @@ def main():
                     conversation_history.append({"role": "assistant", "content": response})
             
             # 显示响应
-            print("\n🤖 AI响应:")
+            print(_("messages.ai_response"))
             print("-" * 40)
             print(response)
             print("-" * 40)
             
         except KeyboardInterrupt:
-            print("\n\n👋 程序被用户中断，再见！")
+            print(_("messages.interrupted"))
             break
         except Exception as e:
-            print(f"\n❌ 发生错误: {str(e)}")
-            print("请重试或检查API服务状态")
+            print(_("messages.error_occurred", error=str(e)))
+            print(_("messages.retry_advice"))
 
 
 if __name__ == "__main__":

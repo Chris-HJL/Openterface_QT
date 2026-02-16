@@ -102,9 +102,17 @@ private:
         data.append(static_cast<char>(y & 0xFF));
         data.append(static_cast<char>((y >> 8) & 0xFF));
         data.append(static_cast<char>(0));
+        data.append(static_cast<char>(calculateChecksum(data)));
 
-        // send the data to serial
         SerialPortManager::getInstance().sendCommandAsync(data, false);
+    }
+
+    uint8_t calculateChecksum(const QByteArray& data) {
+        uint32_t sum = 0;
+        for (char byte : data) {
+            sum += static_cast<unsigned char>(byte);
+        }
+        return static_cast<uint8_t>(sum % 256);
     }
 
     int getRandomForce() {
@@ -143,6 +151,7 @@ private:
     StatusEventCallback* statusEventCallback = nullptr;
 
     uint8_t mapScrollWheel(int delta);
+    uint8_t calculateChecksum(const QByteArray& data);
     MouseMoverThread* mouseMoverThread = nullptr;
 };
 

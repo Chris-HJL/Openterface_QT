@@ -291,18 +291,16 @@ void SemanticAnalyzer::analyzeClickStatement(const CommandStatementNode* node) {
         return;
     }
     
-    // for(const auto& token : options){
-        
-    // }
-    // Parse coordinates and mouse button from options
     QPoint coords = parseCoordinates(options);
-    int mouseButton = parseMouseButton(options);  // This will be fresh for each statement
+    int mouseButton = parseMouseButton(options);
 
     qCDebug(log_script) << "Executing click at:" << coords.x() << "," << coords.y() 
              << "with button:" << mouseButton;
 
     try {
         mouseManager->handleAbsoluteMouseAction(coords.x(), coords.y(), mouseButton, 0);
+        QThread::msleep(50);
+        mouseManager->handleAbsoluteMouseAction(coords.x(), coords.y(), 0, 0);
     } catch (const std::exception& e) {
         qCDebug(log_script) << "Exception caught in handleAbsoluteMouseAction:" << e.what();
     } catch (...) {

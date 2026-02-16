@@ -38,7 +38,6 @@ void MouseManager::setEventCallback(StatusEventCallback* callback) {
 }
 
 void MouseManager::handleAbsoluteMouseAction(int x, int y, int mouse_event, int wheelMovement) {
-    // stop auto move if it is running
     stopAutoMoveMouse();
 
     QByteArray data;
@@ -51,8 +50,8 @@ void MouseManager::handleAbsoluteMouseAction(int x, int y, int mouse_event, int 
     data.append(static_cast<char>(y & 0xFF));
     data.append(static_cast<char>((y >> 8) & 0xFF));
     data.append(static_cast<char>(mappedWheelMovement & 0xFF));
+    data.append(static_cast<char>(calculateChecksum(data)));
 
-    // send the data to serial
     SerialPortManager::getInstance().sendCommandAsync(data, false);
 
     QString mouseEventStr;
@@ -79,8 +78,8 @@ void MouseManager::handleRelativeMouseAction(int dx, int dy, int mouse_event, in
     data.append(static_cast<char>(dx & 0xFF));
     data.append(static_cast<char>(dy & 0xFF));
     data.append(static_cast<char>(mappedWheelMovement & 0xFF));
+    data.append(static_cast<char>(calculateChecksum(data)));
 
-    // send the data to serial
     SerialPortManager::getInstance().sendCommandAsync(data, false);
 
     QString mouseEventStr;
@@ -105,6 +104,14 @@ uint8_t MouseManager::mapScrollWheel(int delta){
     }else{
         return 0xFF - uint8_t(-1*delta / 100)+1;
     }
+}
+
+uint8_t MouseManager::calculateChecksum(const QByteArray& data) {
+    uint32_t sum = 0;
+    for (char byte : data) {
+        sum += static_cast<unsigned char>(byte);
+    }
+    return static_cast<uint8_t>(sum % 256);
 }
 
 void MouseManager::startAutoMoveMouse() {

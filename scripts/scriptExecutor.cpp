@@ -78,7 +78,11 @@ bool ScriptExecutor::executeCommand(const QString& commandName, const QStringLis
         int mouseButton = parseMouseButton(stdOptions);
         qCDebug(log_scriptexec) << "Executing click at:" << coords.x() << coords.y() << "button:" << mouseButton;
         try {
-            if (mouseManager) mouseManager->handleAbsoluteMouseAction(coords.x(), coords.y(), mouseButton, 0);
+            if (mouseManager) {
+                mouseManager->handleAbsoluteMouseAction(coords.x(), coords.y(), mouseButton, 0);
+                QThread::msleep(50);
+                mouseManager->handleAbsoluteMouseAction(coords.x(), coords.y(), 0, 0);
+            }
             else qCDebug(log_scriptexec) << "No mouseManager available";
             return true;
         } catch (const std::exception& e) {
